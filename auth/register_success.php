@@ -1,6 +1,7 @@
 <?php
 session_start();
 
+
 if (!isset($_SESSION['registration_success'])) {
     header('Location: register.php');
     exit();
