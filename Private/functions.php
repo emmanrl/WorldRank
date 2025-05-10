@@ -76,18 +76,55 @@ function register_user($name, $email, $password, $country, $age, $gender) {
 /**
  * Send verification email
  */
+
 function send_verification_email($email, $name, $token) {
-    $verification_url = BASE_URL . "/verify.php?token=" . urlencode($token);
-    $subject = "Verify Your Email Address";
+    // Include PHPMailer files
+    require_once 'PHPMailer/src/Exception.php';
+    require_once 'PHPMailer/src/PHPMailer.php';
+    require_once 'PHPMailer/src/SMTP.php';
     
-    $message = "
+    $verification_url = /*BASE_URL .*/ "http://localhost/worldrank/auth/verify.php?token=" . urlencode($token);
+    $subject = "Verify Your Email Address - WorldRank";
+    
+    // HTML Email Template
+    $message = <<<HTML
     <html>
     <head>
         <title>Email Verification</title>
         <style>
-            body { font-family: 'Bricolage Grotesque', sans-serif; line-height: 1.6; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .button { display: inline-block; padding: 10px 20px; background-color: #0d9488; color: white; text-decoration: none; border-radius: 5px; }
+            body { 
+                font-family: 'Bricolage Grotesque', Arial, sans-serif; 
+                line-height: 1.6;
+                color: #333;
+                background-color: #f5f5f5;
+                margin: 0;
+                padding: 0;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 20px auto; 
+                padding: 30px;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .button { 
+                display: inline-block; 
+                padding: 12px 25px; 
+                background-color: #0d9488; 
+                color: white; 
+                text-decoration: none; 
+                border-radius: 5px;
+                font-weight: bold;
+                margin: 15px 0;
+            }
+            .footer {
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #eee;
+                font-size: 12px;
+                color: #777;
+            }
         </style>
     </head>
     <body>
@@ -95,19 +132,66 @@ function send_verification_email($email, $name, $token) {
             <h2>Welcome to WorldRank, $name!</h2>
             <p>Thank you for registering. Please verify your email address to activate your account and start competing on the leaderboard.</p>
             <p><a href='$verification_url' class='button'>Verify Email</a></p>
-            <p>Or copy this link to your browser:<br>$verification_url</p>
+            <p>Or copy this link to your browser:<br>
+            <code style="word-break:break-all;">$verification_url</code></p>
             <p>This link will expire in 24 hours.</p>
+            
+            <div class="footer">
+                <p>If you didn't request this email, please ignore it.</p>
+                <p>&copy; " . date('Y') . " WorldRank. All rights reserved.</p>
+            </div>
         </div>
     </body>
     </html>
-    ";
+    HTML;
     
-    $headers = "MIME-Version: 1.0" . "\r\n";
-    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-    $headers .= "From: WorldRank <no-reply@" . parse_url(BASE_URL, PHP_URL_HOST) . ">" . "\r\n";
+    // Plain text fallback
+    $plain_message = "Welcome to WorldRank, $name!\n\n"
+                   . "Thank you for registering. Please verify your email address by visiting this link:\n"
+                   . "$verification_url\n\n"
+                   . "This link will expire in 24 hours.\n\n"
+                   . "If you didn't request this email, please ignore it.";
     
-    return mail($email, $subject, $message, $headers);
+    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+    
+    try {
+        // Server settings
+        $mail->isSMTP();
+        $mail->Host       = 'mail.emmanrl.xyz';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = 'info@emmanrl.xyz';
+        $mail->Password   = '@TestPass12';
+        $mail->SMTPSecure = 'ssl';  // Use 'tls' if using port 587
+        $mail->Port       = 465;     // Use 587 for TLS
+        
+        // Enable debugging if needed (0 = off, 1 = client messages, 2 = client and server messages)
+        $mail->SMTPDebug = 0;
+        
+        // Recipients
+        $mail->setFrom('info@emmanrl.xyz', 'WorldRank');
+        $mail->addAddress($email, $name);
+        $mail->addReplyTo('support@emmanrl.xyz', 'WorldRank Support');
+        
+        // Content
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body    = $message;
+        $mail->AltBody = $plain_message;
+        
+        // Additional headers for email clients
+        $mail->addCustomHeader('X-Mailer', 'PHPMailer');
+        $mail->addCustomHeader('Precedence', 'bulk');
+        
+        $mail->send();
+        return true;
+    } catch (PHPMailer\PHPMailer\Exception $e) {
+        // Log the full error for debugging
+        error_log("Email sending failed to $email. Error: " . $e->getMessage());
+        error_log("PHPMailer Debug: " . $mail->ErrorInfo);
+        return false;
+    }
 }
+
 
 /**
  * Verify user email
@@ -132,6 +216,29 @@ function verify_email($token) {
         return ['success' => false, 'error' => 'Verification failed'];
     }
 }
+
+
+function get_user_by_email($email) {
+    // Example implementation - replace with your actual database query
+    $pdo = db_connect();
+    
+    $stmt = $pdo->prepare("SELECT id, name, email, verified_at FROM users WHERE email = ?");
+    $stmt->execute([$email]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+function generate_verification_token() {
+    // Generate a secure random token
+    return bin2hex(random_bytes(32));
+}
+
+function update_verification_token($user_id, $token) {
+    // Update the user's verification token in database
+    $pdo = db_connect();
+        $stmt = $pdo->prepare("UPDATE users SET verification_token = ? WHERE id = ?");
+    return $stmt->execute([$token, $user_id]);
+}
+
 
 /**
  * Login user with credentials

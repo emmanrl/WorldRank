@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'session_token' => $login_result['session_token']
             ];
             
-            redirect('dashboard.php');
+            redirect('../index');
         } else {
             $error = $login_result['error'];
         }
@@ -51,7 +51,7 @@ if (empty($_SESSION['user']) && isset($_COOKIE['remember_token'])) {
             'session_token' => $remember_result['session_token']
         ];
         
-        redirect('dashboard.php');
+        redirect('../index');
     }
 }
 ?>

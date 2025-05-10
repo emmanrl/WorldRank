@@ -49,8 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($form_data['age'] < 13 || $form_data['age'] > 120) {
         $errors['age'] = 'Age must be between 13 and 120';
     }
-
+    
     if (empty($errors)) {
+        // Register user
         $registration = register_user(
             $form_data['name'],
             $form_data['email'],
@@ -67,20 +68,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $form_data['name'],
                 $registration['verification_token']
             );
-
+            
+            
             if ($email_sent) {
+                // Store user data in session
                 $_SESSION['registration_success'] = true;
                 $_SESSION['registration_email'] = $form_data['email'];
                 redirect('register_success.php');
             } else {
+                // Handle email sending failure
                 $errors['general'] = 'Failed to send verification email. Please contact support.';
+                header('Location: register.php');
+                exit();
             }
         } else {
+            // Handle registration failure
             $errors['general'] = $registration['error'];
         }
     }
 }
 ?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
