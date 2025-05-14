@@ -1,4 +1,6 @@
 <?php
+
+
 require 'config.php'; // Database configuration
 
 /**
@@ -191,6 +193,11 @@ function send_verification_email($email, $name, $token) {
         return false;
     }
 }
+
+/**
+ * send emails
+ */
+
 
 
 /**
@@ -411,4 +418,107 @@ function sanitize_input($data) {
 function redirect($url) {
     header("Location: $url");
     exit();
+}
+
+function generate_password_reset_token() {
+    return bin2hex(random_bytes(32));
+}
+
+function store_password_reset_token($user_id, $token) {
+    $pdo = db_connect();
+    $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+    $stmt = $pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)");
+    return $stmt->execute([$user_id, $token, $expires]);
+}
+
+function send_password_reset_email($email, $name, $token) {
+    $reset_url = /*BASE_URL .*/ "http://localhost/worldrank/auth/reset_password.php?token=" . urlencode($token);
+    
+    $subject = "Password Reset Request - WorldRank";
+    
+    $message = <<<HTML
+    <html>
+    <head>
+        <title>Password Reset</title>
+        <style>
+            body { font-family: 'Bricolage Grotesque', sans-serif; line-height: 1.6; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .button { display: inline-block; padding: 10px 20px; background-color: #0d9488; color: white; text-decoration: none; border-radius: 5px; }
+        </style>
+    </head>
+    <body>
+        <div class='container'>
+            <h2>Password Reset Request</h2>
+            <p>Hello $name,</p>
+            <p>We received a request to reset your password. Click the button below to reset it:</p>
+            <p><a href='$reset_url' class='button'>Reset Password</a></p>
+            <p>Or copy this link to your browser:<br>$reset_url</p>
+            <p>This link will expire in 1 hour.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+        </div>
+    </body>
+    </html>
+    HTML;
+    
+    $plain_message = "Hello $name,\n\n"
+                   . "We received a request to reset your password. Visit this link to reset it:\n"
+                   . "$reset_url\n\n"
+                   . "This link will expire in 1 hour.\n\n"
+                   . "If you didn't request this, please ignore this email.";
+    
+    // Use your existing PHPMailer implementation to send the email
+    // Include PHPMailer files
+    require_once 'PHPMailer/src/Exception.php';
+    require_once 'PHPMailer/src/PHPMailer.php';
+    require_once 'PHPMailer/src/SMTP.php';
+
+    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+    
+    try {
+        $mail->isSMTP();
+        $mail->Host       = 'mail.emmanrl.xyz';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = 'info@emmanrl.xyz';
+        $mail->Password   = '@TestPass12';
+        $mail->SMTPSecure = 'ssl';
+        $mail->Port       = 465;
+        
+        $mail->setFrom('info@emmanrl.xyz', 'WorldRank');
+        $mail->addAddress($email, $name);
+        
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body    = $message;
+        $mail->AltBody = $plain_message;
+        
+        return $mail->send();
+    } catch (Exception $e) {
+        error_log("Password reset email failed: " . $mail->ErrorInfo);
+        return false;
+    }
+}
+
+
+function verify_password_reset_token($token) {
+    $pdo = db_connect();
+    
+    // Check if token exists and isn't expired
+    $stmt = $pdo->prepare("SELECT user_id FROM password_resets WHERE token = ? AND expires_at > NOW() AND used = 0");
+    $stmt->execute([$token]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    return $result ? $result['user_id'] : false;
+}
+
+function update_user_password($user_id, $password) {
+    $pdo = db_connect();
+    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+    return $stmt->execute([$hashed_password, $user_id]);
+}
+
+function invalidate_password_reset_token($token) {
+    $pdo = db_connect();
+    $stmt = $pdo->prepare("UPDATE password_resets SET used = 1 WHERE token = ?");
+    return $stmt->execute([$token]);
 }
